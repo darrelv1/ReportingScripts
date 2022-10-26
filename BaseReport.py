@@ -2,7 +2,15 @@ from abc import ABC, abstractmethod
 from nbformat import write
 
 import pandas as pd
+import re
 from datetime import datetime
+
+class Tools: 
+
+    RegexCodes= {
+        "FUND_EX": re.compile("[fF][uU][nN][dD][\w]*")
+    }
+
 
 class Basereports(ABC): 
 
@@ -150,7 +158,7 @@ class Jobcostreport(Reports):
         return(self.jobcostdf)
 
 
-class Capital_Jobcostreport(Jobcostreport):
+class Capital_Jobcostreport(Jobcostreport, Tools):
 
     def __init__(self, link):
         super().__init__(link)
@@ -159,11 +167,11 @@ class Capital_Jobcostreport(Jobcostreport):
         self.stringlink = "output/"+self.name+".xlsx"
         self.jobcostdf2 = self.jobcostdf.loc[:,:][self.jobcostdf.Source != "Asset Disposal"]
         self.jobcostdfRAW = self.jobcostdf
+        fund_REGEX = self.RegexCodes['FUND_EX']
 
         source =  set()
         for i in self.jobcostdf2.Source:
             source.add(i)
-        
 
         """---------------
         *******************
@@ -184,11 +192,18 @@ class Capital_Jobcostreport(Jobcostreport):
             Journal Memos that contain all variations of transfer OR,
             Accounting Source equals Asset Assign Accounting
             
-
         """
+        """     
+        correction
+        Asset Adjustment 
+        manual journal
+        """
+
         #True Transfer Report
-        self.transferdf = self.jobcostdf[(~self.jobcostdf['Worktags'].str.contains('fund') & ~self.jobcostdf['Worktags'].str.contains('Fund') ) & (self.jobcostdf['Line Memo'].str.contains('Tsfr', na = False)) | ((self.jobcostdf['Line Memo'].str.contains('Trsfr', na = False)) | (self.jobcostdf['Journal Memo'].str.contains('Tsfr', na = False))|  (self.jobcostdf['Journal Memo'].str.contains('Trsfr', na = False))  | ((self.jobcostdf.Source == 'Asset Assign Accounting')))]
+        self.transferdf = self.jobcostdf[(~self.jobcostdf['Worktags'].str.contains(fund_REGEX, regex = True)) & (self.jobcostdf['Line Memo'].str.contains('Tsfr', na = False)) | ((self.jobcostdf['Line Memo'].str.contains('Trsfr', na = False)) | (self.jobcostdf['Journal Memo'].str.contains('Tsfr', na = False))|  (self.jobcostdf['Journal Memo'].str.contains('Trsfr', na = False))  | ((self.jobcostdf.Source == 'Asset Assign Accounting')))]
         self.transferdf = self.transferdf[(self.transferdf["Supplier"].isna()) & (self.transferdf.Source == "Asset Assign Accounting")]
+
+
 
         """
         Additions Report (24110)
@@ -207,6 +222,16 @@ class Capital_Jobcostreport(Jobcostreport):
         #Additions Report
         self.Additiondf = self.jobcostdf2[(self.jobcostdf2.Source.isin(source) & (self.jobcostdf2['Worktags'].str.contains('fund') | self.jobcostdf2['Worktags'].str.contains('Fund') | ~self.jobcostdf2['Line Memo'].str.contains('Tsfr', na = False) & ~self.jobcostdf2['Line Memo'].str.contains('Trsfr', na = False)  & ~self.jobcostdf2['Journal Memo'].str.contains('Tsfr', na = False) & ~self.jobcostdf2['Journal Memo'].str.contains('Trsfr', na = False)))]
         self.Additiondf = self.Additiondf[ ((self.Additiondf["Source"] == 'Asset Assign Accounting') & (self.Additiondf["Supplier"].notna()) |  self.Additiondf['Worktags'].str.contains('fund') | self.Additiondf['Worktags'].str.contains('Fund')) | ~self.Additiondf['Source'].str.contains("Asset Assign Accounting")]
+
+
+
+
+
+    #The Gap between transfers and additions filter...
+
+
+
+
 
     #Container
         self.reports_list= [self.jobcostdfRAW, self.disposaldf, self.jobcostdf, self.transferdf, self.Additiondf]
