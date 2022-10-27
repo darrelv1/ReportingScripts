@@ -10,6 +10,7 @@ class Tools:
     RegexCodes= {
         "FUND_EX": re.compile("[fF][uU][nN][dD][\w]*"),
         "TRANS_EX": re.compile("([Tt]r?sfr)|([Tt]rans(fer)?s?)"),
+        "TRANSSOURCE_EX" : re.compile("Asset Adjustment|Asset Assign Accounting")
     }
 
 
@@ -172,6 +173,7 @@ class Capital_Jobcostreport(Jobcostreport, Tools):
         self.jobcostdfRAW = self.jobcostdf
         fund_REGEX = self.RegexCodes['FUND_EX']
         trans_REGEX = self.RegexCodes['TRANS_EX']
+        transSource_REGEX = self.RegexCodes['TRANSSOURCE_EX']
 
         source =  set()
         for i in self.jobcostdf2.Source:
@@ -197,29 +199,16 @@ class Capital_Jobcostreport(Jobcostreport, Tools):
             Accounting Source equals Asset Assign Accounting
             
         """
-        """     
-        correction
-        Asset Adjustment 
-        manual journal
-        """
-
+       
         #True Transfer Report
+        #Filters
         self.transferdf = self.jobcostdf[(~self.jobcostdf['Worktags'].str.contains(fund_REGEX, regex = True)) &
-                         (self.jobcostdf['Line Memo'].str.contains(trans_REGEX, regex = True, na = False)) | 
-                         (self.jobcostdf['Journal Memo'].str.contains(trans_REGEX, regex = True, na = False) |
-                        ((self.jobcostdf.Source == 'Asset Assign Accounting')))]
-        
-    
-        """
-                         self.jobcostdf[(~self.jobcostdf['Worktags'].str.contains(fund_REGEX, regex = True)) &
-                         (self.jobcostdf['Line Memo'].str.contains(trans_REGEX, regex = True, na = False)) | 
-                         (self.jobcostdf['Journal Memo'].str.contains(trans_REGEX, regex = True, na = False)) |  
-                         ((self.jobcostdf.Source == 'Asset Assign Accounting')))]"""
+                         (self.jobcostdf['Line Memo'].str.contains(trans_REGEX, regex = True, na = False) | 
+                         self.jobcostdf['Journal Memo'].str.contains(trans_REGEX, regex = True, na = False)) |
+                         self.jobcostdf["Source"].str.contains(transSource_REGEX, regex =True, na = False)]
 
-        self.transferdf = self.transferdf[(self.transferdf["Supplier"].isna()) &
-                         (self.transferdf.Source == "Asset Assign Accounting")]
-
-
+        #Filter on Transfer Dataframe subset -> Remove all rows will values in supplier column              
+        self.transferdf = self.transferdf[~self.transferdf["Supplier"].notnull()]
 
         """
         Additions Report (24110)
@@ -244,9 +233,9 @@ class Capital_Jobcostreport(Jobcostreport, Tools):
                           ~self.jobcostdf2['Journal Memo'].str.contains(trans_REGEX, regex = True, na = False)))]
 
         self.Additiondf = self.Additiondf[ ((self.Additiondf["Source"] == 'Asset Assign Accounting') &
-                                           (self.Additiondf["Supplier"].notna()) |
-                                            self.Additiondf['Worktags'].str.contains('Fund')) |
-                                            ~self.Additiondf['Source'].str.contains("Asset Assign Accounting")]
+                          (self.Additiondf["Supplier"].notna()) |
+                          self.Additiondf['Worktags'].str.contains('Fund')) |
+                          ~self.Additiondf['Source'].str.contains("Asset Assign Accounting")]
 
 
 
@@ -254,34 +243,12 @@ class Capital_Jobcostreport(Jobcostreport, Tools):
 
     #The Gap between transfers and additions filter...
 
-
-
-
-
     #Container
         self.reports_list= [self.jobcostdfRAW, self.disposaldf, self.jobcostdf, self.transferdf, self.Additiondf]
         self.reports_str= ["jobcostdfRAW","disposaldf", "jobcostdf", "transferdf" , "Additiondf" ]
         
         self.reportname_list = []
-"""
-Doesn't seem to be necessary 
-    def get_name(self):
-        return (self.name)
 
-    def get_additions(self):
-        print(self.Additiondf)
-        return (self.Additiondf)
-
-    def get_disposals(self):
-        return (self.disposaldf)    
-
-    def get_transfers(self):
-        return(self.transferdf)
-
-    def get_jobcostdf(self):
-        return(self.jobcostdf)
-
-"""
   
 class flowthrough(Reports): 
 
