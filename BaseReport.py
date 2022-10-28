@@ -171,6 +171,7 @@ class Capital_Jobcostreport(Jobcostreport, Tools):
         self.stringlink = "output/"+self.name+".xlsx"
         self.jobcostdf2 = self.jobcostdf.loc[:,:][self.jobcostdf.Source != "Asset Disposal"]
         self.jobcostdfRAW = self.jobcostdf
+        #Regex PropertiesAbsoRTel
         fund_REGEX = self.RegexCodes['FUND_EX']
         trans_REGEX = self.RegexCodes['TRANS_EX']
         transSource_REGEX = self.RegexCodes['TRANSSOURCE_EX']
@@ -235,11 +236,7 @@ class Capital_Jobcostreport(Jobcostreport, Tools):
         self.Additiondf = self.Additiondf[ ((self.Additiondf["Source"] == 'Asset Assign Accounting') &
                           (self.Additiondf["Supplier"].notna()) |
                           self.Additiondf['Worktags'].str.contains('Fund')) |
-                          ~self.Additiondf['Source'].str.contains("Asset Assign Accounting")]
-
-
-
-
+                          ~self.Additiondf['Source'].str.contains(transSource_REGEX, regex = True)]
 
     #The Gap between transfers and additions filter...
 
