@@ -14,6 +14,22 @@ class Tools:
     }
 
 
+    """
+       Merges the two dataframes, useing the index as the matching column for both and using the 'left' join to include all the lines from the orgDf
+       The result has (temporarydf) the dataframes adjacent together
+       Get split into two dataframes by iloc,and utlizing the length function on the orginaldf.columns as the split point to create both the 'left' and 'right' dataframe. 
+       Then the left df gets compared by right df. 
+
+    """
+    def filterDiff (orgDf, newDf):
+        cols = orgDf.columns
+        temporarydf = pd.merge(orgDf, newDf, how="left", right_index=True, left_index=True)
+        leftDf = temporarydf.iloc[:,:len(cols.columns)].set_axis(cols.columns, axis = 1)
+        rightDf = temporarydf.iloc[:,len(cols.columns):].set_axis(cols.columns, axis = 1)   
+        
+        #compare df 
+        return  rightDf.compare(leftDf)
+
 class Basereports(ABC): 
 
     date = ""
@@ -239,6 +255,9 @@ class Capital_Jobcostreport(Jobcostreport, Tools):
                           ~self.Additiondf['Source'].str.contains(transSource_REGEX, regex = True)]
 
     #The Gap between transfers and additions filter...
+        
+        self.filterDiff(self.transferdf, self.jobcostdf)
+
 
     #Container
         self.reports_list= [self.jobcostdfRAW, self.disposaldf, self.jobcostdf, self.transferdf, self.Additiondf]
@@ -297,4 +316,3 @@ class Holdbacks(flowthrough):
 
     def get_holdback(self):
         return (self.holdbackdf)
-
