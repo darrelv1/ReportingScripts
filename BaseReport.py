@@ -21,14 +21,15 @@ class Tools:
        Then the left df gets compared by right df. 
 
     """
-    def filterDiff (orgDf, newDf):
+    def filterDiff(self,orgDf, newDf):
         cols = orgDf.columns
         temporarydf = pd.merge(orgDf, newDf, how="left", right_index=True, left_index=True)
-        leftDf = temporarydf.iloc[:,:len(cols.columns)].set_axis(cols.columns, axis = 1)
-        rightDf = temporarydf.iloc[:,len(cols.columns):].set_axis(cols.columns, axis = 1)   
+        leftDf = temporarydf.iloc[:,:len(cols)].set_axis(cols, axis = 1)
+        rightDf = temporarydf.iloc[:,len(cols):].set_axis(cols, axis = 1)   
         
         #compare df 
-        return  rightDf.compare(leftDf)
+        comparedf = rightDf.compare(leftDf)
+        return  comparedf.droplevel([0], axis =1)
 
 class Basereports(ABC): 
 
@@ -109,8 +110,9 @@ class Reports(Basereports):
             for i in dictionaryholder.keys():
                 
                 temp = dictionaryholder[i]
-                if temp.empty:
-                            continue
+                #empty or even has the correct columns to complete the pivots pages
+                if temp.empty or ~("Source" in temp.columns):
+                    continue
 
                 temp = temp.pivot_table(index = "Source", aggfunc= sum)
                 
@@ -256,12 +258,32 @@ class Capital_Jobcostreport(Jobcostreport, Tools):
 
     #The Gap between transfers and additions filter...
         
-        self.filterDiff(self.transferdf, self.jobcostdf)
+        self.diff_Transfers = self.filterDiff(self.jobcostdf, self.transferdf)
+        self.diff_Additions = self.filterDiff(self.jobcostdf, self.Additiondf)
 
+        def get_diff_transfers(self):
+            return (self.diff_Transfers)
 
-    #Container
-        self.reports_list= [self.jobcostdfRAW, self.disposaldf, self.jobcostdf, self.transferdf, self.Additiondf]
-        self.reports_str= ["jobcostdfRAW","disposaldf", "jobcostdf", "transferdf" , "Additiondf" ]
+    #Container for printing
+        self.reports_list= [
+                            self.jobcostdfRAW, 
+                            self.disposaldf, 
+                            self.jobcostdf, 
+                            self.transferdf, 
+                            self.Additiondf, 
+                            self.diff_Transfers.
+                            self.diff_Addiitons
+                            ]
+
+        self.reports_str= [
+                            "jobcostdfRAW",
+                            "disposaldf",
+                            "jobcostdf",
+                            "transferdf",
+                            "Additiondf",
+                            "diff_Transfers",
+                            "diff_Additions" 
+                            ]
         
         self.reportname_list = []
 
