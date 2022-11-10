@@ -115,9 +115,10 @@ class Reports(Basereports):
             i = list(dictionaryholder.keys())[ind]
 
             if i == self.reports_str[0]:
-                prevPivot = dictionaryholder[i].pivot_table(index = "Source", aggfunc= sum)
+                prevPivot = dictionaryholder[i].pivot_table(index = "Source", aggfunc= {"Amount": sum}) 
                 prevPivot.rename(columns = {"Amount":self.reports_str[ind]}, inplace = True)
-                first = False            
+                first = False     
+                 
               
             else: 
                 temp = dictionaryholder[i]
@@ -126,13 +127,13 @@ class Reports(Basereports):
                     continue
 
                 #iteration of Pivot Creation
-                tempPivot = temp.pivot_table(index = "Source", aggfunc= sum)
+                tempPivot = temp.pivot_table(index = "Source", aggfunc={"Amount": sum})
                 names ={}
                 names["Amount"] = self.reports_str[ind]
                 tempPivot.rename(columns = names, inplace = True)
+                
                 #Merge of Pivot on to the prev consolidated pivots... added ones will also be a subset
                 prevPivot  = pd.merge(prevPivot,tempPivot, how="outer", left_index = True, right_index =True )
-
 
         #transforms all the in the dataframe to 0        
         prevPivot[:] = prevPivot[:].fillna(0)     
@@ -177,7 +178,7 @@ class Reports(Basereports):
                 if temp.empty or ("other" in temp.columns):
                     continue
 
-                temp = temp.pivot_table(index = "Source", aggfunc= sum)
+                temp = temp.pivot_table(index = "Source", aggfunc= {"Amount": sum})
                 
                 
                 total = temp["Amount"]
@@ -213,17 +214,17 @@ class Jobcostreport(Reports):
 
         #Reports by Filters 
         self.disposaldf = self.jobcostdf.loc[:,:][self.jobcostdf.Source == "Asset Disposal"]
-       
+        """
         self.transferdf = self.jobcostdf2[(~self.jobcostdf2['Worktags'].str.contains('fund') & ~self.jobcostdf2['Worktags'].str.contains('Fund') ) & ((self.jobcostdf2['Line Memo'].str.contains('Tsfr', na = False)) | (self.jobcostdf2['Journal Memo'].str.contains('Tsfr', na = False)) | ((self.jobcostdf2.Source == 'Asset Assign Accounting')))]
         self.Additiondf =  self.jobcostdf2[(self.jobcostdf2.Source.isin(source) & (self.jobcostdf2['Worktags'].str.contains('fund') | self.jobcostdf2['Worktags'].str.contains('Fund') | ~self.jobcostdf2['Line Memo'].str.contains('Tsfr', na = False) & ~self.jobcostdf2['Line Memo'].str.contains('Trsfr', na = False)  & ~self.jobcostdf2['Journal Memo'].str.contains('Tsfr', na = False) & ~self.jobcostdf2['Journal Memo'].str.contains('Trsfr', na = False)))]
         self.Additiondf = self.Additiondf[ (self.Additiondf['Worktags'].str.contains('fund') | self.Additiondf['Worktags'].str.contains('Fund')) | ~self.Additiondf['Source'].str.contains("Asset Assign Accounting")]
-
+        
         #Container
         self.reports_list= [self.jobcostdfRAW, self.disposaldf, self.jobcostdf, self.transferdf, self.Additiondf]
         self.reports_str= ["jobcostdfRAW","disposaldf", "jobcostdf", "transferdf" , "Additiondf" ]
         
         self.reportname_list = []
-
+        
     def get_name(self):
         return (self.name)
 
@@ -241,7 +242,7 @@ class Jobcostreport(Reports):
 
     def get_jobcostdf(self):
         return(self.jobcostdf)
-
+    """
 
 class Capital_Jobcostreport(Jobcostreport, Tools):
 
@@ -284,10 +285,16 @@ class Capital_Jobcostreport(Jobcostreport, Tools):
        
         #True Transfer Report
         #Filters
-        self.transferdf = self.jobcostdf2[(~self.jobcostdf['Worktags'].str.contains(fund_REGEX, regex = True)) &
-                         (self.jobcostdf2['Line Memo'].str.contains(trans_REGEX, regex = True, na = False) | 
-                         self.jobcostdf2['Journal Memo'].str.contains(trans_REGEX, regex = True, na = False)) |
-                         self.jobcostdf2["Source"].str.contains(transSource_REGEX, regex =True, na = False)]
+        if ~self.jobcostdf['Line Memo'].isnull().all() & ~self.jobcostdf['Journal Memo'].isnull().all():
+            self.transferdf = self.jobcostdf2[(~self.jobcostdf2['Worktags'].str.contains(fund_REGEX, regex = True)) &
+                            (self.jobcostdf2['Line Memo'].str.contains(trans_REGEX, regex = True, na = False) | 
+                            self.jobcostdf2['Journal Memo'].str.contains(trans_REGEX, regex = True, na = False)) |
+                            self.jobcostdf2["Source"].str.contains(transSource_REGEX, regex =True, na = False)]
+        
+        else:
+            self.transferdf = self.jobcostdf2[(~self.jobcostdf2['Worktags'].str.contains(fund_REGEX, regex = True)) &
+                              self.jobcostdf2["Source"].str.contains(transSource_REGEX, regex =True, na = False)]
+
 
         #Filter on Transfer Dataframe subset -> Remove all rows will values in supplier column              
         self.truetransferdf = self.transferdf[~self.transferdf["Supplier"].notnull()]
@@ -327,15 +334,25 @@ class Capital_Jobcostreport(Jobcostreport, Tools):
         """
         
         #Additions Report
-        self.Additiondf = self.jobcostdf2[(self.jobcostdf2.Source.isin(source) &
-                          (self.jobcostdf2['Worktags'].str.contains(fund_REGEX, regex = True) | 
-                          ~self.jobcostdf2['Line Memo'].str.contains(trans_REGEX, regex = True, na = False) &
-                          ~self.jobcostdf2['Journal Memo'].str.contains(trans_REGEX, regex = True, na = False)))]
+        if ~self.jobcostdf['Line Memo'].isnull().all() & ~self.jobcostdf['Journal Memo'].isnull().all():
+            self.Additiondf = self.jobcostdf2[(self.jobcostdf2.Source.isin(source) &
+                            (self.jobcostdf2['Worktags'].str.contains(fund_REGEX, regex = True) | 
+                            ~self.jobcostdf2['Line Memo'].str.contains(trans_REGEX, regex = True, na = False) &
+                            ~self.jobcostdf2['Journal Memo'].str.contains(trans_REGEX, regex = True, na = False)))]
 
-        self.Additiondf = self.Additiondf[ ((self.Additiondf["Source"] == 'Asset Assign Accounting') &
-                          (self.Additiondf["Supplier"].notna()) |
-                          self.Additiondf['Worktags'].str.contains('Fund')) |
-                          ~self.Additiondf['Source'].str.contains(transSource_REGEX, regex = True)]
+            self.Additiondf = self.Additiondf[ ((self.Additiondf["Source"] == 'Asset Assign Accounting') &
+                            (self.Additiondf["Supplier"].notna()) |
+                            self.Additiondf['Worktags'].str.contains('Fund')) |
+                            ~self.Additiondf['Source'].str.contains(transSource_REGEX, regex = True)]
+        
+        else: 
+            self.Additiondf = self.jobcostdf2[(self.jobcostdf2.Source.isin(source) |
+                            (self.jobcostdf2['Worktags'].str.contains(fund_REGEX, regex = True)))]
+
+            self.Additiondf = self.Additiondf[ ((self.Additiondf["Source"] == 'Asset Assign Accounting') &
+                            (self.Additiondf["Supplier"].notna()) |
+                            self.Additiondf['Worktags'].str.contains('Fund')) |
+                            ~self.Additiondf['Source'].str.contains(transSource_REGEX, regex = True)]
 
         """
             All Transfer Report (24110)
