@@ -137,12 +137,15 @@ class Reports(Basereports):
 
         #transforms all the in the dataframe to 0        
         prevPivot[:] = prevPivot[:].fillna(0)     
+
+        #Total Column for amount to go agianst orginal 
         prevPivot['Total'] = (
                               prevPivot['disposaldf'] +
                               prevPivot['transferdf'] +
                               prevPivot['Additiondf'] 
                               )
-                              
+
+        #To verify if there is discrepancy between org and sub set dfs             
         prevPivot['Differnce RAW vs Total'] =(
                                                 prevPivot['Total'].astype('int') -
                                                 prevPivot['jobcostdfRAW'].astype('int')
@@ -154,6 +157,8 @@ class Reports(Basereports):
         prevPivot.round(2)
         prevPivot.loc['Total'] = prevPivot.sum(numeric_only=True)
         print(prevPivot)
+
+
         return prevPivot
 
 
