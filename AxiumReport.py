@@ -5,8 +5,6 @@ from datetime import datetime
 class Reporting:
     #Job Cost RFJL
 
-    
-
     date = datetime.today().strftime("%m-%d-%y")
 
     file = "Report-" + date +".xlsx"

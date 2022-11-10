@@ -2,7 +2,36 @@ from abc import ABC, abstractmethod
 from nbformat import write
 
 import pandas as pd
+import re
 from datetime import datetime
+
+class Tools: 
+
+    RegexCodes= {
+        "FUND_EX": re.compile("[fF][uU][nN][dD][\w]*"),
+        "TRANS_EX": re.compile("([Tt]r?sfr)|([Tt]rans(fer)?s?)"),
+        "TRANSSOURCE_EX" : re.compile("Asset Adjustment|Asset Assign Accounting")
+    }
+
+
+    """
+       Merges the two dataframes, useing the index as the matching column for both and using the 'left' join to include all the lines from the orgDf
+       The result has (temporarydf) the dataframes adjacent together
+       Get split into two dataframes by iloc,and utlizing the length function on the orginaldf.columns as the split point to create both the 'left' and 'right' dataframe. 
+       Then the left df gets compared by right df. 
+
+    """
+    #newdf has to be a subset of orgDf, else change the 'how' parameter in merge method
+    def filterDiff(self,orgDf, newDf):
+        cols = orgDf.columns
+        temporarydf = pd.merge(orgDf, newDf, how="left", right_index=True, left_index=True)
+        leftDf = temporarydf.iloc[:,:len(cols)].set_axis(cols, axis = 1)
+        rightDf = temporarydf.iloc[:,len(cols):].set_axis(cols, axis = 1)   
+        
+        #compare df 
+        comparedf = rightDf.compare(leftDf)
+        #Take out the first Index column from the mutli-index to be able to print
+        return  comparedf.droplevel([0], axis =1)
 
 class Basereports(ABC): 
 
@@ -59,6 +88,7 @@ class Reports(Basereports):
         self.reportname_list = []
         
         
+        
     def dictionarydf(self):
 
         dictionaryholder = {}
@@ -70,10 +100,70 @@ class Reports(Basereports):
         return dictionaryholder
 
     
-       
-    def printer(self):
+    #dictionaryholder = dictionarydf() 
 
+    def anaylsisReport(self): 
+
+        dictionaryholder = {}
         dictionaryholder = self.dictionarydf() 
+
+        #The Dataframe that will be added on too. 
+        prevPivot = pd.DataFrame()
+        
+        
+        for ind in range(len(dictionaryholder.keys())):
+            i = list(dictionaryholder.keys())[ind]
+
+            if i == self.reports_str[0]:
+                prevPivot = dictionaryholder[i].pivot_table(index = "Source", aggfunc= sum)
+                prevPivot.rename(columns = {"Amount":self.reports_str[ind]}, inplace = True)
+                first = False            
+              
+            else: 
+                temp = dictionaryholder[i]
+
+                if temp.empty or  "other" in temp.columns: 
+                    continue
+
+                #iteration of Pivot Creation
+                tempPivot = temp.pivot_table(index = "Source", aggfunc= sum)
+                names ={}
+                names["Amount"] = self.reports_str[ind]
+                tempPivot.rename(columns = names, inplace = True)
+                #Merge of Pivot on to the prev consolidated pivots... added ones will also be a subset
+                prevPivot  = pd.merge(prevPivot,tempPivot, how="outer", left_index = True, right_index =True )
+
+
+        #transforms all the in the dataframe to 0        
+        prevPivot[:] = prevPivot[:].fillna(0)     
+
+        #Adding all the Disposal + Transfer + Additions dynamically
+        prevPivot['Total'] = prevPivot.iloc[:, 1:-1].sum(axis =1)
+
+        #To verify if there is discrepancy between org and sub set dfs             
+        prevPivot['Differnce RAW vs Total'] =(
+                                                prevPivot['Total'].astype('int') -
+                                                prevPivot['jobcostdfRAW'].astype('int')
+                                                )
+   
+        #Total Row
+        prevPivot.round(2)
+        prevPivot.loc['Total'] = prevPivot.sum(numeric_only=True)
+        print(prevPivot)
+
+        with pd.ExcelWriter(self.stringlink, engine="openpyxl", mode= "a") as writer:
+    
+            prevPivot.to_excel(writer, sheet_name= "Anaylsis"  )
+
+        return prevPivot
+
+
+    
+       
+    def printer(self):    
+
+        dictionaryholder = {}
+        dictionaryholder = self.dictionarydf()  
     
         with pd.ExcelWriter(self.stringlink) as writer:
             for k,v in dictionaryholder.items():
@@ -83,12 +173,13 @@ class Reports(Basereports):
             for i in dictionaryholder.keys():
                 
                 temp = dictionaryholder[i]
-                if temp.empty:
-                            continue
+                #empty or even has the correct columns to complete the pivots pages
+                if temp.empty or ("other" in temp.columns):
+                    continue
 
                 temp = temp.pivot_table(index = "Source", aggfunc= sum)
                 
-            
+                
                 total = temp["Amount"]
                 temp = pd.concat([temp, total], axis =1)
 
@@ -144,13 +235,15 @@ class Jobcostreport(Reports):
         return (self.disposaldf)    
 
     def get_transfers(self):
+        #testing if inhertiance is working
+        print("Hey Inhertiance on the method is work")
         return(self.transferdf)
 
     def get_jobcostdf(self):
         return(self.jobcostdf)
 
 
-class Capital_Jobcostreport(Jobcostreport):
+class Capital_Jobcostreport(Jobcostreport, Tools):
 
     def __init__(self, link):
         super().__init__(link)
@@ -159,11 +252,14 @@ class Capital_Jobcostreport(Jobcostreport):
         self.stringlink = "output/"+self.name+".xlsx"
         self.jobcostdf2 = self.jobcostdf.loc[:,:][self.jobcostdf.Source != "Asset Disposal"]
         self.jobcostdfRAW = self.jobcostdf
+        #Regex PropertiesAbsoRTel
+        fund_REGEX = self.RegexCodes['FUND_EX']
+        trans_REGEX = self.RegexCodes['TRANS_EX']
+        transSource_REGEX = self.RegexCodes['TRANSSOURCE_EX']
 
         source =  set()
         for i in self.jobcostdf2.Source:
             source.add(i)
-        
 
         """---------------
         *******************
@@ -182,13 +278,37 @@ class Capital_Jobcostreport(Jobcostreport):
          - Included
             Line Memos OR,
             Journal Memos that contain all variations of transfer OR,
-            Accounting Source equals Asset Assign Accounting
+            Accounting Source equals Asset Assign Accounting 
             
+        """
+       
+        #True Transfer Report
+        #Filters
+        self.transferdf = self.jobcostdf2[(~self.jobcostdf['Worktags'].str.contains(fund_REGEX, regex = True)) &
+                         (self.jobcostdf2['Line Memo'].str.contains(trans_REGEX, regex = True, na = False) | 
+                         self.jobcostdf2['Journal Memo'].str.contains(trans_REGEX, regex = True, na = False)) |
+                         self.jobcostdf2["Source"].str.contains(transSource_REGEX, regex =True, na = False)]
+
+        #Filter on Transfer Dataframe subset -> Remove all rows will values in supplier column              
+        self.truetransferdf = self.transferdf[~self.transferdf["Supplier"].notnull()]
 
         """
-        #True Transfer Report
-        self.transferdf = self.jobcostdf[(~self.jobcostdf['Worktags'].str.contains('fund') & ~self.jobcostdf['Worktags'].str.contains('Fund') ) & (self.jobcostdf['Line Memo'].str.contains('Tsfr', na = False)) | ((self.jobcostdf['Line Memo'].str.contains('Trsfr', na = False)) | (self.jobcostdf['Journal Memo'].str.contains('Tsfr', na = False))|  (self.jobcostdf['Journal Memo'].str.contains('Trsfr', na = False))  | ((self.jobcostdf.Source == 'Asset Assign Accounting')))]
-        self.transferdf = self.transferdf[(self.transferdf["Supplier"].isna()) & (self.transferdf.Source == "Asset Assign Accounting")]
+        All Transfer Report (24110)
+        Filtered out: 
+
+        - Excluded 
+            ~Worktags with all variations of "fund"
+
+        - Included
+            Line Memos OR,
+            Journal Memos that contain all variations of transfer OR,
+            Accounting Source equals Asset Assign Accounting 
+            
+        """
+
+        #see True Transfer filter for details
+        self.allTransferdf = self.transferdf
+
 
         """
         Additions Report (24110)
@@ -198,38 +318,77 @@ class Capital_Jobcostreport(Jobcostreport):
             Line Memos OR,
             Journal Memos that contain all variations of transfer
             Accounting Source equals Asset Assign Accounting
+
             THEN Supplier is empty for all the "Asset Assign Accounting" sourced.
 
          - Included
            Worktags with all variations of "fund"
            THEN Supplier == notna() for all "Asset Assign Accounting" sourced.
         """
+        
         #Additions Report
-        self.Additiondf = self.jobcostdf2[(self.jobcostdf2.Source.isin(source) & (self.jobcostdf2['Worktags'].str.contains('fund') | self.jobcostdf2['Worktags'].str.contains('Fund') | ~self.jobcostdf2['Line Memo'].str.contains('Tsfr', na = False) & ~self.jobcostdf2['Line Memo'].str.contains('Trsfr', na = False)  & ~self.jobcostdf2['Journal Memo'].str.contains('Tsfr', na = False) & ~self.jobcostdf2['Journal Memo'].str.contains('Trsfr', na = False)))]
-        self.Additiondf = self.Additiondf[ ((self.Additiondf["Source"] == 'Asset Assign Accounting') & (self.Additiondf["Supplier"].notna()) |  self.Additiondf['Worktags'].str.contains('fund') | self.Additiondf['Worktags'].str.contains('Fund')) | ~self.Additiondf['Source'].str.contains("Asset Assign Accounting")]
+        self.Additiondf = self.jobcostdf2[(self.jobcostdf2.Source.isin(source) &
+                          (self.jobcostdf2['Worktags'].str.contains(fund_REGEX, regex = True) | 
+                          ~self.jobcostdf2['Line Memo'].str.contains(trans_REGEX, regex = True, na = False) &
+                          ~self.jobcostdf2['Journal Memo'].str.contains(trans_REGEX, regex = True, na = False)))]
 
-    #Container
-        self.reports_list= [self.jobcostdfRAW, self.disposaldf, self.jobcostdf, self.transferdf, self.Additiondf]
-        self.reports_str= ["jobcostdfRAW","disposaldf", "jobcostdf", "transferdf" , "Additiondf" ]
+        self.Additiondf = self.Additiondf[ ((self.Additiondf["Source"] == 'Asset Assign Accounting') &
+                          (self.Additiondf["Supplier"].notna()) |
+                          self.Additiondf['Worktags'].str.contains('Fund')) |
+                          ~self.Additiondf['Source'].str.contains(transSource_REGEX, regex = True)]
+
+        """
+            All Transfer Report (24110)
+            Filtered out: 
+
+            - Excluded 
+                ~Worktags with all variations of "fund"
+                THEN Supplier == empty for all "Asset Assign Accounting" sourced.
+
+            - Included
+                Line Memos OR,
+                Journal Memos that contain all variations of transfer OR,
+                Accounting Source equals Asset Assign Accounting
+                
+            """
+
+
+
+
+
+    #The Gap between transfers and additions filter...
+        
+        self.diff_TrueTransfers = self.filterDiff(self.jobcostdf, self.truetransferdf)
+        self.diff_Additions = self.filterDiff(self.jobcostdf, self.Additiondf)
+
+        def get_diff_transfers(self):
+            return (self.diff_Transfers)
+
+    #Container for printing
+        #Imparative that the RAW dataframe comes first 
+        self.reports_list= [
+                            self.jobcostdfRAW, 
+                            self.disposaldf,  
+                            self.truetransferdf, 
+                            self.Additiondf,  
+                            self.allTransferdf,
+                            self.diff_TrueTransfers,
+                            self.diff_Additions
+                            ]
+
+        self.reports_str= [
+                            "jobcostdfRAW",
+                            "disposaldf",
+                            "transferdf",
+                            "Additiondf",
+                            "allTransferdf",
+                            "diff_TrueTransfers",
+                            "diff_Additions" 
+                            ]
         
         self.reportname_list = []
 
-    def get_name(self):
-        return (self.name)
-
-    def get_additions(self):
-        print(self.Additiondf)
-        return (self.Additiondf)
-
-    def get_disposals(self):
-        return (self.disposaldf)    
-
-    def get_transfers(self):
-        return(self.transferdf)
-
-    def get_jobcostdf(self):
-        return(self.jobcostdf)
-
+    
 
   
 class flowthrough(Reports): 
@@ -282,4 +441,3 @@ class Holdbacks(flowthrough):
 
     def get_holdback(self):
         return (self.holdbackdf)
-
