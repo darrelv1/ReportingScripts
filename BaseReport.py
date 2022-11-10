@@ -21,6 +21,7 @@ class Tools:
        Then the left df gets compared by right df. 
 
     """
+    #newdf has to be a subset of orgDf, else change the 'how' parameter in merge method
     def filterDiff(self,orgDf, newDf):
         cols = orgDf.columns
         temporarydf = pd.merge(orgDf, newDf, how="left", right_index=True, left_index=True)
@@ -29,6 +30,7 @@ class Tools:
         
         #compare df 
         comparedf = rightDf.compare(leftDf)
+        #Take out the first Index column from the mutli-index to be able to print
         return  comparedf.droplevel([0], axis =1)
 
 class Basereports(ABC): 
@@ -86,6 +88,7 @@ class Reports(Basereports):
         self.reportname_list = []
         
         
+        
     def dictionarydf(self):
 
         dictionaryholder = {}
@@ -97,10 +100,69 @@ class Reports(Basereports):
         return dictionaryholder
 
     
-       
-    def printer(self):
+    #dictionaryholder = dictionarydf() 
 
+    def anaylsisReport(self): 
+
+        dictionaryholder = {}
         dictionaryholder = self.dictionarydf() 
+
+        #The Dataframe that will be added on too. 
+        prevPivot = pd.DataFrame()
+        
+        
+        for ind in range(len(dictionaryholder.keys())):
+            i = list(dictionaryholder.keys())[ind]
+
+            if i == self.reports_str[0]:
+                prevPivot = dictionaryholder[i].pivot_table(index = "Source", aggfunc= sum)
+                prevPivot.rename(columns = {"Amount":self.reports_str[ind]}, inplace = True)
+                first = False            
+              
+            else: 
+                temp = dictionaryholder[i]
+
+                if temp.empty or  "other" in temp.columns:
+                    
+                    
+                    continue
+                #iteration of Pivot Creation
+                tempPivot = temp.pivot_table(index = "Source", aggfunc= sum)
+                names ={}
+                names["Amount"] = self.reports_str[ind]
+                tempPivot.rename(columns = names, inplace = True)
+                #Merge of Pivot on to the prev consolidated pivots... added ones will also be a subset
+                prevPivot  = pd.merge(prevPivot,tempPivot, how="outer", left_index = True, right_index =True )
+
+
+        #transforms all the in the dataframe to 0        
+        prevPivot[:] = prevPivot[:].fillna(0)     
+        prevPivot['Total'] = (
+                              prevPivot['disposaldf'] +
+                              prevPivot['transferdf'] +
+                              prevPivot['Additiondf'] 
+                              )
+                              
+        prevPivot['Differnce RAW vs Total'] =(
+                                                prevPivot['Total'].astype('int') -
+                                                prevPivot['jobcostdfRAW'].astype('int')
+                                                )
+
+
+
+        #Total Row
+        prevPivot.round(2)
+        prevPivot.loc['Total'] = prevPivot.sum(numeric_only=True)
+        print(prevPivot)
+        return prevPivot
+
+
+    
+       
+    def printer(self):    
+
+        dictionaryholder = {}
+        dictionaryholder = self.dictionarydf()  
     
         with pd.ExcelWriter(self.stringlink) as writer:
             for k,v in dictionaryholder.items():
@@ -111,12 +173,12 @@ class Reports(Basereports):
                 
                 temp = dictionaryholder[i]
                 #empty or even has the correct columns to complete the pivots pages
-                if temp.empty or ~("Source" in temp.columns):
+                if temp.empty or ("other" in temp.columns):
                     continue
 
                 temp = temp.pivot_table(index = "Source", aggfunc= sum)
                 
-            
+                
                 total = temp["Amount"]
                 temp = pd.concat([temp, total], axis =1)
 
@@ -221,10 +283,10 @@ class Capital_Jobcostreport(Jobcostreport, Tools):
        
         #True Transfer Report
         #Filters
-        self.transferdf = self.jobcostdf[(~self.jobcostdf['Worktags'].str.contains(fund_REGEX, regex = True)) &
-                         (self.jobcostdf['Line Memo'].str.contains(trans_REGEX, regex = True, na = False) | 
-                         self.jobcostdf['Journal Memo'].str.contains(trans_REGEX, regex = True, na = False)) |
-                         self.jobcostdf["Source"].str.contains(transSource_REGEX, regex =True, na = False)]
+        self.transferdf = self.jobcostdf2[(~self.jobcostdf['Worktags'].str.contains(fund_REGEX, regex = True)) &
+                         (self.jobcostdf2['Line Memo'].str.contains(trans_REGEX, regex = True, na = False) | 
+                         self.jobcostdf2['Journal Memo'].str.contains(trans_REGEX, regex = True, na = False)) |
+                         self.jobcostdf2["Source"].str.contains(transSource_REGEX, regex =True, na = False)]
 
         #Filter on Transfer Dataframe subset -> Remove all rows will values in supplier column              
         self.transferdf = self.transferdf[~self.transferdf["Supplier"].notnull()]
@@ -265,20 +327,19 @@ class Capital_Jobcostreport(Jobcostreport, Tools):
             return (self.diff_Transfers)
 
     #Container for printing
+        #Imparative that the RAW dataframe comes first 
         self.reports_list= [
                             self.jobcostdfRAW, 
-                            self.disposaldf, 
-                            self.jobcostdf, 
+                            self.disposaldf,  
                             self.transferdf, 
-                            self.Additiondf, 
-                            self.diff_Transfers.
-                            self.diff_Addiitons
+                            self.Additiondf,  
+                            self.diff_Transfers,
+                            self.diff_Additions
                             ]
 
         self.reports_str= [
                             "jobcostdfRAW",
                             "disposaldf",
-                            "jobcostdf",
                             "transferdf",
                             "Additiondf",
                             "diff_Transfers",
@@ -286,6 +347,8 @@ class Capital_Jobcostreport(Jobcostreport, Tools):
                             ]
         
         self.reportname_list = []
+
+    
 
   
 class flowthrough(Reports): 
