@@ -122,10 +122,9 @@ class Reports(Basereports):
             else: 
                 temp = dictionaryholder[i]
 
-                if temp.empty or  "other" in temp.columns:
-                    
-                    
+                if temp.empty or  "other" in temp.columns: 
                     continue
+
                 #iteration of Pivot Creation
                 tempPivot = temp.pivot_table(index = "Source", aggfunc= sum)
                 names ={}
@@ -138,26 +137,23 @@ class Reports(Basereports):
         #transforms all the in the dataframe to 0        
         prevPivot[:] = prevPivot[:].fillna(0)     
 
-        #Total Column for amount to go agianst orginal 
-        prevPivot['Total'] = (
-                              prevPivot['disposaldf'] +
-                              prevPivot['transferdf'] +
-                              prevPivot['Additiondf'] 
-                              )
+        #Adding all the Disposal + Transfer + Additions dynamically
+        prevPivot['Total'] = prevPivot.iloc[:, 1:-1].sum(axis =1)
 
         #To verify if there is discrepancy between org and sub set dfs             
         prevPivot['Differnce RAW vs Total'] =(
                                                 prevPivot['Total'].astype('int') -
                                                 prevPivot['jobcostdfRAW'].astype('int')
                                                 )
-
-
-
+   
         #Total Row
         prevPivot.round(2)
         prevPivot.loc['Total'] = prevPivot.sum(numeric_only=True)
         print(prevPivot)
 
+        with pd.ExcelWriter(self.stringlink, engine="openpyxl", mode= "a") as writer:
+    
+            prevPivot.to_excel(writer, sheet_name= "Anaylsis"  )
 
         return prevPivot
 
@@ -282,7 +278,7 @@ class Capital_Jobcostreport(Jobcostreport, Tools):
          - Included
             Line Memos OR,
             Journal Memos that contain all variations of transfer OR,
-            Accounting Source equals Asset Assign Accounting
+            Accounting Source equals Asset Assign Accounting 
             
         """
        
@@ -294,7 +290,25 @@ class Capital_Jobcostreport(Jobcostreport, Tools):
                          self.jobcostdf2["Source"].str.contains(transSource_REGEX, regex =True, na = False)]
 
         #Filter on Transfer Dataframe subset -> Remove all rows will values in supplier column              
-        self.transferdf = self.transferdf[~self.transferdf["Supplier"].notnull()]
+        self.truetransferdf = self.transferdf[~self.transferdf["Supplier"].notnull()]
+
+        """
+        All Transfer Report (24110)
+        Filtered out: 
+
+        - Excluded 
+            ~Worktags with all variations of "fund"
+
+        - Included
+            Line Memos OR,
+            Journal Memos that contain all variations of transfer OR,
+            Accounting Source equals Asset Assign Accounting 
+            
+        """
+
+        #see True Transfer filter for details
+        self.allTransferdf = self.transferdf
+
 
         """
         Additions Report (24110)
@@ -323,9 +337,28 @@ class Capital_Jobcostreport(Jobcostreport, Tools):
                           self.Additiondf['Worktags'].str.contains('Fund')) |
                           ~self.Additiondf['Source'].str.contains(transSource_REGEX, regex = True)]
 
+        """
+            All Transfer Report (24110)
+            Filtered out: 
+
+            - Excluded 
+                ~Worktags with all variations of "fund"
+                THEN Supplier == empty for all "Asset Assign Accounting" sourced.
+
+            - Included
+                Line Memos OR,
+                Journal Memos that contain all variations of transfer OR,
+                Accounting Source equals Asset Assign Accounting
+                
+            """
+
+
+
+
+
     #The Gap between transfers and additions filter...
         
-        self.diff_Transfers = self.filterDiff(self.jobcostdf, self.transferdf)
+        self.diff_TrueTransfers = self.filterDiff(self.jobcostdf, self.truetransferdf)
         self.diff_Additions = self.filterDiff(self.jobcostdf, self.Additiondf)
 
         def get_diff_transfers(self):
@@ -336,9 +369,10 @@ class Capital_Jobcostreport(Jobcostreport, Tools):
         self.reports_list= [
                             self.jobcostdfRAW, 
                             self.disposaldf,  
-                            self.transferdf, 
+                            self.truetransferdf, 
                             self.Additiondf,  
-                            self.diff_Transfers,
+                            self.allTransferdf,
+                            self.diff_TrueTransfers,
                             self.diff_Additions
                             ]
 
@@ -347,7 +381,8 @@ class Capital_Jobcostreport(Jobcostreport, Tools):
                             "disposaldf",
                             "transferdf",
                             "Additiondf",
-                            "diff_Transfers",
+                            "allTransferdf",
+                            "diff_TrueTransfers",
                             "diff_Additions" 
                             ]
         
