@@ -21,18 +21,22 @@ what table they store form the db },
 
 """
 class Users(ABC): 
-    
+
+   
+
     def __init__(self):
-        self.id
-        self.name
-        self.pm 
-        self.projects
-        self.rate
+        self.id = ""
+        self.name =""
+        self.pm =""
+        self.projects=[]
+        self.rate = 0.00
+        
+    numberOfReports = 0;
 
     #class attributes    
 
     def __str__(self):
-        info = "The name"+ name + "n\ id:" + self.id + "n\ id:"+ self.id
+        info = "The name"+ self.name + "n\ id:" + self.id + "n\ id:"+ self.id
         return "The Name"+self.name
         
     numofreports = 0; 
@@ -50,30 +54,34 @@ class Users(ABC):
         pass
 
     @classmethod
-    def countProducedReports():
-        pass 
-
-    
-
-
-
+    def countProducedReports(cls):
+       cls.numberOfReports += 1
+        
+        
 
 class Accountant(Users):
 
-    def __new___(cls):
-        print("__new__ magic method is called")
-        inst = object.__new___(cls)
-        return inst
+    # def __new___(cls):
+    #     print("__new__ magic method is called")
+    #     inst = object.__new___(cls)
+    #     return inst
 
     def __init__(self,name):
         super().__init__()
         self.name = name
-
-
-  
+        Users.countProducedReports()
+        
+    def idSelf(self):
+        super().id = self.name +"."+super().countProducedReports 
 
     def getReports():
         pass
 
 
-
+Darrel = Accountant("Darrel")
+Darrel = Accountant("Darrel")
+Darrel = Accountant("Darrel")
+Darrel = Accountant("Darrel")
+Darrel = Accountant("Darrel")
+Darrel = Accountant("Darrel")
+print(Darrel.numberOfReports)
