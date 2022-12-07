@@ -52,7 +52,8 @@ class Users(ABC):
     @property
     def setPMs(self, link):
         pass
-
+    
+    #Initalizer Counter
     @classmethod
     def countProducedReports(cls):
        cls.numberOfReports += 1
@@ -78,10 +79,5 @@ class Accountant(Users):
         pass
 
 
-Darrel = Accountant("Darrel")
-Darrel = Accountant("Darrel")
-Darrel = Accountant("Darrel")
-Darrel = Accountant("Darrel")
-Darrel = Accountant("Darrel")
 Darrel = Accountant("Darrel")
 print(Darrel.numberOfReports)
